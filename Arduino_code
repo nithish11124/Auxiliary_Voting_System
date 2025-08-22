@@ -1,0 +1,90 @@
+#include <Wire.h>
+#include <Adafruit_Fingerprint.h>
+
+#if (defined(__AVR__) || defined(ESP8266)) && !defined(__AVR_ATmega2560__)
+SoftwareSerial mySerial(2, 3);
+#else
+#define mySerial Serial1
+#endif
+
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+
+const int Relay = 7;
+unsigned char flag = 0, flag1 = 0;
+int votedIDs[200] = {0}; // Array to store fingerIDs of voters
+int voterCount = 0;
+
+void setup() {
+  Serial.begin(9600);
+  finger.begin(57600);
+  pinMode(Relay, OUTPUT);
+  delay(5);
+
+  Serial.println("Voting System");
+  Serial.println("Initializing...");
+
+  if (finger.verifyPassword()) {
+    Serial.println("Sensor found");
+  } else {
+    Serial.println("Sensor not found");
+    while (1) { delay(1); }
+  }
+
+  finger.getParameters();
+  finger.getTemplateCount();
+  delay(1000);
+}
+
+void loop() {
+  Serial.println("Place Finger");
+  delay(200);
+
+  if (getFingerprintID()) {
+    if (isVoterIDUsed(finger.fingerID)) {
+      Serial.println("Already Voted");
+    } else {
+      registerVote(finger.fingerID);
+      Serial.println("Vote Authorized");
+    }
+    delay(1000);
+  } else if (flag) {  // No match
+    Serial.println("Not Authorized");
+    delay(1000);
+    flag = 0;
+  }
+}
+
+uint8_t getFingerprintID() {
+  uint8_t p = finger.getImage();
+  if (p != FINGERPRINT_OK) return 0;
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) return 0;
+
+  p = finger.fingerSearch();
+  if (p == FINGERPRINT_OK) {
+    flag1 = 1;  // Match found
+    return 1;
+  } else if (p == FINGERPRINT_NOTFOUND) {
+    flag = 1;  // No match found
+    return 0;
+  }
+  
+  return 0;
+}
+
+bool isVoterIDUsed(int id) {
+  for (int i = 0; i < voterCount; i++) {
+    if (votedIDs[i] == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void registerVote(int id) {
+  if (voterCount < 200) {
+    votedIDs[voterCount] = id;
+    voterCount++;
+  }
+}
